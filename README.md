@@ -4,15 +4,25 @@ Advanced-Reports, Report the bad people :).
 ## Game Supported
 - CS:GO
 
+## Custom Features
+- Set your open report resons in the cfg file
+
+
+
 ## ConVars
 - sm_advreports_discord - Should we print to the discord server, reports? (0 off, 1 on).
 - sm_advreports_webhook - Sets where the webhook should send.
 
+## Player Commands
+- /calladmin - Opens the player report menu.
+
+## Admin Commands
+- /reports - Opens the admin menu for, reported players.
+- /purge - Purges the reports list after X days.
+
 ## How to Install
 - Donwload AdvancedReports.smx and put into /csgo/addons/sourcemod/plugins
-- Configure settings by editing /cfg/sourcemod/AdvancedReports.cfg
-
-Configure settings by editing /cfg/sourcemod/AdvancedSpawnProtection.cfg
+- Configure settings by editing /cfg/sourcemod/advreasons.cfg
 
 ## Updates
 
