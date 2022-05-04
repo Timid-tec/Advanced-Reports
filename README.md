@@ -1,17 +1,21 @@
-# Disable-Radar
-A source mod plugin simply made to remove the radar on the top right section in game, With the idea in mind for it to be more reliable for the servers to run with the intention of fewer memory leaks.
+# Advanced-Reports
+Advanced-Reports, Report the bad people :).
 
-# Game Supported
+## Game Supported
 - CS:GO
 
-# ConVars
-- sm_disableradar_enabled - Should we show radar on top-left. (0 off, 1 on)
+## ConVars
+- sm_advreports_discord - Should we print to the discord server, reports? (0 off, 1 on).
+- sm_advreports_webhook - Sets where the webhook should send.
 
-# How to Install
-- Donwload DisabledRadar.smx and put into /csgo/addons/sourcemod/plugins
+## How to Install
+- Donwload AdvancedReports.smx and put into /csgo/addons/sourcemod/plugins
+- Configure settings by editing /cfg/sourcemod/AdvancedReports.cfg
 
-# Updates
+Configure settings by editing /cfg/sourcemod/AdvancedSpawnProtection.cfg
 
-| Version | Change-Log          |
+## Updates
+
+| Version | Change-Log         |
 | ------- | ------------------ |
-| 4.2.0   | Added if (client && GetClientTeam(client) > 1 || GetClientTeam(client) < 1) |
+| 1.0.0   | Added plugin to GitHub 5/4/22 |
