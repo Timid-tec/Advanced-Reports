@@ -97,11 +97,6 @@ public void OnPluginStart()
 	
 	/* load the key values on plugin start */
 	ParseKV();
-	
-	/* Purge Old Log Files */
-	if (hCvarLogDays != INVALID_HANDLE)
-		if (GetConVarInt(hCvarLogDays) > 0)
-		PurgeOldLogs();
 }
 
 public void OnConfigsExecuted()
@@ -501,51 +496,3 @@ void BuildLogFilePath() // Build Log File System Path
 	if (!StrEqual(ADVR_LogFile, sLogFile))
 		LogAction(0, -1, "[AdvReports] Log File: %s", ADVR_LogFile);
 }
-
-void PurgeOldLogs() // Purge Old Log Files
-{
-	#if _DEBUG
-	LogDebug(false, "PurgeOldLogs - Purging Old Log Files");
-	#endif
-	char sLogPath[PLATFORM_MAX_PATH];
-	char buffer[256];
-	Handle hDirectory = INVALID_HANDLE;
-	FileType type = FileType_Unknown;
-	
-	BuildPath(Path_SM, sLogPath, sizeof(sLogPath), LOG_FOLDER);
-	
-	#if _DEBUG
-	LogDebug(false, "PurgeOldLogs - Purging Old Log Files from: %s", sLogPath);
-	#endif
-	if (DirExists(sLogPath))
-	{
-		hDirectory = OpenDirectory(sLogPath);
-		if (hDirectory != INVALID_HANDLE)
-		{
-			int iTimeOffset = GetTime() - ((SECONDS_IN_DAY * GetConVarInt(hCvarLogDays)) + 30);
-			while (ReadDirEntry(hDirectory, buffer, sizeof(buffer), type))
-			{
-				if (type == FileType_File)
-				{
-					if (StrContains(buffer, LOG_PREFIX, false) != -1)
-					{
-						char file[PLATFORM_MAX_PATH];
-						Format(file, sizeof(file), "%s/%s", sLogPath, buffer);
-						#if _DEBUG
-						LogDebug(false, "PurgeOldLogs - Checking file: %s", buffer);
-						#endif
-						if (GetFileTime(file, FileTime_LastChange) < iTimeOffset) // Log file is old
-							if (DeleteFile(file))
-							LogAction(0, -1, "[AdvReports] Deleted Old Log File: %s", file);
-					}
-				}
-			}
-		}
-	}
-	
-	if (hDirectory != INVALID_HANDLE)
-	{
-		CloseHandle(hDirectory);
-		hDirectory = INVALID_HANDLE;
-	}
-} 
