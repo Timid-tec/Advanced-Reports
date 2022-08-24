@@ -1,7 +1,7 @@
-#if defined _crabstocks_included
+#if defined _timid_included
 #endinput
 #endif
-#define _crabstocks_included
+#define _timid_included
 #pragma semicolon 1
 #pragma newdecls required
 

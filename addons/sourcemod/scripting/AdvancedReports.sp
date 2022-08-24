@@ -14,13 +14,29 @@
  * You should have received a copy of the GNU General Public License along with 
  * this program. If not, see http://www.gnu.org/licenses/.
  */
- 
+
+/* Change this to enable debug */
+#define _DEBUG 											0 // 1 = Minimum Debug 3 = Full Debug
+#define _DEBUG_MODE										1 // 1 = Log to File, 2 = Log to Game Logs, 3 = Print to Chat, 4 = Print to Console
+
+#define LOG_FOLDER										"logs"
+#define LOG_PREFIX										"advr_"
+#define LOG_EXT											"log"
+
+#define SECONDS_IN_DAY									86400
+
+#if _DEBUG
+ConVar hCvarLogDebug = null;
+#endif
+
+/* Log File */
+char ADVR_LogFile[PLATFORM_MAX_PATH];
+
 #include <discord>
 #include <sourcemod>
 #include <cstrike>
-#include <timid>
 #include <server_redirect>
-#include <advreports/advreports>
+#include <timid>
 
 Handle gRMenu;
 
@@ -46,6 +62,12 @@ static const char g_sMysqlCreate[] = "CREATE TABLE IF NOT EXISTS `aReports` (`Id
 
 public void OnPluginStart()
 {
+	BuildLogFilePath();
+	
+	#if _DEBUG
+	LogDebug(false, "AFK Plugin Started!");
+	#endif
+	
 	/* Create Cvars */
 	CreateCvars();
 	
@@ -75,17 +97,22 @@ public void OnPluginStart()
 	
 	/* load the key values on plugin start */
 	ParseKV();
+	
+	/* Purge Old Log Files */
+	if (hCvarLogDays != INVALID_HANDLE)
+		if (GetConVarInt(hCvarLogDays) > 0)
+		PurgeOldLogs();
 }
 
-public void OnConfigsExecuted() 
+public void OnConfigsExecuted()
 {
 	GetCvarValues();
 }
 
 /* Tried making it so players join and have a warning, display warning to player */
 
-/*
 
+/*
 public void OnClientPutInServer(int client)
 {
 	char sQueryReports[1024];
@@ -97,11 +124,9 @@ public void SQLPlayerReports(Handle owner, Handle hndl, const char[] error, any 
 {
 	int client = data;
 	
-	
 	ReportDetialMenu = CreateMenu(ReportDetialMenuHNDLR);
 	while (SQL_FetchRow(hndl)) {
-		char rPlayer[MAX_NAME_LENGTH + 8];
-		SQL_FetchString(hndl, 0, rPlayer, sizeof(rPlayer));
+		SQL_FetchString(hndl, 0, playername, sizeof(playername));
 		SQL_FetchString(hndl, 3, reporter, sizeof(reporter));
 		
 		char title[64];
@@ -112,10 +137,30 @@ public void SQLPlayerReports(Handle owner, Handle hndl, const char[] error, any 
 		Format(reporterItem, sizeof(reporterItem), "Reporter: %s", reporter);
 		AddMenuItem(ReportDetialMenu, "x", reporterItem, ITEMDRAW_DISABLED);
 	}
-	DisplayMenu(ReportDetialMenu, client, 10);
+	if (client == playername[32])
+	{
+		DisplayMenu(ReportDetialMenu, client, MENU_TIME_FOREVER);
+	}
+}
+
+public int ReportDetialMenuHNDLR(Menu menu, MenuAction action, int client, int choice)
+{
+	switch (action)
+	{
+		case MenuAction_Select:
+		{
+			char info[32];
+			menu.GetItem(choice, info, sizeof(info));
+			selectedClient = StringToInt(info);
+			if (IsClientInGame(selectedClient))
+			{
+				DisplayMenu(gRMenu, client, MENU_TIME_FOREVER);
+			}
+		}
+		case MenuAction_End: {  }
+	}
 }
 */
-
 
 public int PlayerMenuHNDLR(Menu menu, MenuAction action, int client, int choice)
 {
@@ -187,11 +232,11 @@ public int MenuHandler1(Menu menu, MenuAction action, int client, int choice)
 			
 			
 			/* Get report client id */
-			GetClientAuthId(selectedClient, AuthId_SteamID64, gAuth, sizeof(gAuth));
+			GetClientAuthId(selectedClient, AuthId_Steam2, gAuth, sizeof(gAuth));
 			strcopy(gSelectedClientSteam[selectedClient], sizeof(gSelectedClientSteam[]), gAuth);
 			
 			/* Get reporter client id */
-			GetClientAuthId(client, AuthId_SteamID64, gClientAuth, sizeof(gClientAuth));
+			GetClientAuthId(client, AuthId_Steam2, gClientAuth, sizeof(gClientAuth));
 			strcopy(gClientSteam[client], sizeof(gClientSteam[]), gClientAuth);
 			
 			FormatTime(gDate, sizeof(gDate), "%m/%d/%Y - %I:%M:%S", GetTime());
@@ -405,7 +450,6 @@ public void ReportOptionsMenu(int client)
 	gMenuHandles[client] = new Menu(ReportOptionsHNDLR, MENU_ACTIONS_ALL);
 	gMenuHandles[client].SetTitle("Report Options, %s!", playername);
 	gMenuHandles[client].AddItem("gotoserver", "Go to server!");
-	gMenuHandles[client].AddItem("warn", "Warn Player!");
 	gMenuHandles[client].AddItem("ban", "Ban Player!");
 	gMenuHandles[client].AddItem("kick", "Kick Player!");
 	gMenuHandles[client].ExitButton = true;
@@ -431,3 +475,77 @@ public int ReportOptionsHNDLR(Menu menu, MenuAction action, int client, int choi
 		}
 	}
 }
+
+
+// Log Functions
+void BuildLogFilePath() // Build Log File System Path
+{
+	char sLogPath[PLATFORM_MAX_PATH];
+	BuildPath(Path_SM, sLogPath, sizeof(sLogPath), LOG_FOLDER);
+	
+	if (!DirExists(sLogPath)) // Check if SourceMod Log Folder Exists Otherwise Create One
+		CreateDirectory(sLogPath, 511);
+	
+	char cTime[64];
+	FormatTime(cTime, sizeof(cTime), "%Y%m%d");
+	
+	char sLogFile[PLATFORM_MAX_PATH];
+	sLogFile = ADVR_LogFile;
+	
+	BuildPath(Path_SM, ADVR_LogFile, sizeof(ADVR_LogFile), "%s/%s%s.%s", LOG_FOLDER, LOG_PREFIX, cTime, LOG_EXT);
+	
+	#if _DEBUG
+	LogDebug(false, "BuildLogFilePath - AFK Log Path: %s", ADVR_LogFile);
+	#endif
+	
+	if (!StrEqual(ADVR_LogFile, sLogFile))
+		LogAction(0, -1, "[AdvReports] Log File: %s", ADVR_LogFile);
+}
+
+void PurgeOldLogs() // Purge Old Log Files
+{
+	#if _DEBUG
+	LogDebug(false, "PurgeOldLogs - Purging Old Log Files");
+	#endif
+	char sLogPath[PLATFORM_MAX_PATH];
+	char buffer[256];
+	Handle hDirectory = INVALID_HANDLE;
+	FileType type = FileType_Unknown;
+	
+	BuildPath(Path_SM, sLogPath, sizeof(sLogPath), LOG_FOLDER);
+	
+	#if _DEBUG
+	LogDebug(false, "PurgeOldLogs - Purging Old Log Files from: %s", sLogPath);
+	#endif
+	if (DirExists(sLogPath))
+	{
+		hDirectory = OpenDirectory(sLogPath);
+		if (hDirectory != INVALID_HANDLE)
+		{
+			int iTimeOffset = GetTime() - ((SECONDS_IN_DAY * GetConVarInt(hCvarLogDays)) + 30);
+			while (ReadDirEntry(hDirectory, buffer, sizeof(buffer), type))
+			{
+				if (type == FileType_File)
+				{
+					if (StrContains(buffer, LOG_PREFIX, false) != -1)
+					{
+						char file[PLATFORM_MAX_PATH];
+						Format(file, sizeof(file), "%s/%s", sLogPath, buffer);
+						#if _DEBUG
+						LogDebug(false, "PurgeOldLogs - Checking file: %s", buffer);
+						#endif
+						if (GetFileTime(file, FileTime_LastChange) < iTimeOffset) // Log file is old
+							if (DeleteFile(file))
+							LogAction(0, -1, "[AdvReports] Deleted Old Log File: %s", file);
+					}
+				}
+			}
+		}
+	}
+	
+	if (hDirectory != INVALID_HANDLE)
+	{
+		CloseHandle(hDirectory);
+		hDirectory = INVALID_HANDLE;
+	}
+} 
