@@ -23,8 +23,6 @@
 #define LOG_PREFIX										"advr_"
 #define LOG_EXT											"log"
 
-#define SECONDS_IN_DAY									86400
-
 #if _DEBUG
 ConVar hCvarLogDebug = null;
 #endif
@@ -65,7 +63,7 @@ public void OnPluginStart()
 	BuildLogFilePath();
 	
 	#if _DEBUG
-	LogDebug(false, "AFK Plugin Started!");
+	LogDebug(false, "Adv-Reports Plugin Started!");
 	#endif
 	
 	/* Create Cvars */
@@ -90,7 +88,6 @@ public void OnPluginStart()
 	
 	/* Admin Commands */
 	RegAdminCmd("sm_reports", CMD_Reports, ADMFLAG_SLAY, "Opens the player reports menu.");
-	//RegAdminCmd("sm_purgereports", CMD_Purge, ADMFLAG_SLAY, "Purges from the reports list after X days.");
 	
 	/* Cfg File */
 	AutoExecConfig(true, "AdvancedReports");
