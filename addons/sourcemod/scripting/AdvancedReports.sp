@@ -492,4 +492,4 @@ void BuildLogFilePath() // Build Log File System Path
 	
 	if (!StrEqual(ADVR_LogFile, sLogFile))
 		LogAction(0, -1, "[AdvReports] Log File: %s", ADVR_LogFile);
-}
+} 
