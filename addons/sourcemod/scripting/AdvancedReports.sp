@@ -170,6 +170,7 @@ public int PlayerMenuHNDLR(Menu menu, MenuAction action, int client, int choice)
 		}
 		case MenuAction_End: {  }
 	}
+	return 0;
 }
 
 public void ParseKV()
@@ -333,6 +334,7 @@ public int ListPlayerReportsHNDLR(Handle menu, MenuAction action, int client, in
 		FormatEx(detailsQuery, sizeof(detailsQuery), "SELECT `playername`, `steam`, `reason`, `reporter`, `date`, `serverip` FROM `%s` WHERE `steam` = '%s'", g_sSQLTable, cValue);
 		SQL_TQuery(g_aReportsDB, SQLDetailsQuery, detailsQuery, client);
 	}
+	return 0;
 }
 
 public void SQLDetailsQuery(Handle owner, Handle hndl, const char[] error, any data) {
@@ -435,6 +437,7 @@ public int DetailsMenuHNDLR(Menu menu, MenuAction action, int client, int choice
 			DumbDB(client);
 		}
 	}
+	return 0;
 }
 
 public void ReportOptionsMenu(int client)
@@ -466,6 +469,7 @@ public int ReportOptionsHNDLR(Menu menu, MenuAction action, int client, int choi
 			DumbDB(client);
 		}
 	}
+	return 0;
 }
 
 
