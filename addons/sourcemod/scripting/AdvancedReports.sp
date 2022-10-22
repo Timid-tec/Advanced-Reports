@@ -14,27 +14,12 @@
  * You should have received a copy of the GNU General Public License along with 
  * this program. If not, see http://www.gnu.org/licenses/.
  */
-
-/* Change this to enable debug */
-#define _DEBUG 											0 // 1 = Minimum Debug 3 = Full Debug
-#define _DEBUG_MODE										1 // 1 = Log to File, 2 = Log to Game Logs, 3 = Print to Chat, 4 = Print to Console
-
-#define LOG_FOLDER										"logs"
-#define LOG_PREFIX										"advr_"
-#define LOG_EXT											"log"
-
-#if _DEBUG
-ConVar hCvarLogDebug = null;
-#endif
-
-/* Log File */
-char ADVR_LogFile[PLATFORM_MAX_PATH];
-
 #include <discord>
 #include <sourcemod>
 #include <cstrike>
 #include <server_redirect>
 #include <timid>
+#include <debug>
 
 Handle gRMenu;
 
@@ -471,29 +456,3 @@ public int ReportOptionsHNDLR(Menu menu, MenuAction action, int client, int choi
 	}
 	return 0;
 }
-
-
-// Log Functions
-void BuildLogFilePath() // Build Log File System Path
-{
-	char sLogPath[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sLogPath, sizeof(sLogPath), LOG_FOLDER);
-	
-	if (!DirExists(sLogPath)) // Check if SourceMod Log Folder Exists Otherwise Create One
-		CreateDirectory(sLogPath, 511);
-	
-	char cTime[64];
-	FormatTime(cTime, sizeof(cTime), "%Y%m%d");
-	
-	char sLogFile[PLATFORM_MAX_PATH];
-	sLogFile = ADVR_LogFile;
-	
-	BuildPath(Path_SM, ADVR_LogFile, sizeof(ADVR_LogFile), "%s/%s%s.%s", LOG_FOLDER, LOG_PREFIX, cTime, LOG_EXT);
-	
-	#if _DEBUG
-	LogDebug(false, "BuildLogFilePath - AFK Log Path: %s", ADVR_LogFile);
-	#endif
-	
-	if (!StrEqual(ADVR_LogFile, sLogFile))
-		LogAction(0, -1, "[AdvReports] Log File: %s", ADVR_LogFile);
-} 
