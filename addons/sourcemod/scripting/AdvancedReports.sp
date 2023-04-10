@@ -1,4 +1,4 @@
-/*  [CS:GO] Advanced-Reports, Report the bad people :).
+/*  [CS:GO] Advanced-Reports: Report the bad people :).
  *
  *  Copyright (C) 2021 Mr.Timid // timidexempt@gmail.com
  * 
@@ -14,12 +14,15 @@
  * You should have received a copy of the GNU General Public License along with 
  * this program. If not, see http://www.gnu.org/licenses/.
  */
+
 #include <discord>
 #include <sourcemod>
 #include <cstrike>
 #include <server_redirect>
 #include <timid>
 #include <debug>
+
+#define PREFIX "\x08「\x0EAdvReports\x08」"
 
 Handle gRMenu;
 
@@ -31,11 +34,9 @@ public Plugin myinfo =
 	name = "Advanced-Reports", 
 	author = PLUGIN_AUTHOR, 
 	description = "Advanced-Reports, Report the bad people :)", 
-	version = "1.0.2", 
+	version = "4.2.2", 
 	url = "https://steamcommunity.com/id/MrTimid/"
 }
-
-#define ARPREFIX "\x08「\x0EAdvReports\x08」"
 
 /* Global SQL Char */
 char gDbName[] = "advancedreports";
@@ -206,7 +207,7 @@ public int MenuHandler1(Menu menu, MenuAction action, int client, int choice)
 			Format(gBuffer, sizeof(gBuffer), "%s", g_CmdResponse[choice]);
 			/* Item = GetMenuSelectionPosition(); PrintToChat(client, "\x08[\x03ARDebug\x08] Player = %N | Reason = %s", selectedClient, gBuffer); */
 			
-			PrintToChat(client, "%s Your report has been submited!", ARPREFIX);
+			PrintToChat(client, "%s Your report has been submited!", PREFIX);
 			
 			
 			/* Get report client id */
@@ -455,4 +456,4 @@ public int ReportOptionsHNDLR(Menu menu, MenuAction action, int client, int choi
 		}
 	}
 	return 0;
-}
+} 
