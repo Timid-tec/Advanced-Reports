@@ -29,4 +29,5 @@
 
 | Version | Change-Log         |
 | ------- | ------------------ |
-| 1.0.0   | Added plugin to GitHub 5/4/22 |
+| 4.2.2   | Fixed Include Files, And other know issues |
+| 4.2.0   | Added plugin to GitHub 5/4/22 |
