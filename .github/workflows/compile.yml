@@ -1,0 +1,19 @@
+name: Compile SourcePawn
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Compile with SourceMod 1.12.0.7041
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
