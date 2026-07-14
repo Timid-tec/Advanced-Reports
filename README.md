@@ -1,26 +1,62 @@
 # Advanced Reports
 
-Advanced Reports is a SourceMod player-reporting plugin. Players can report another player from an in-game menu, reports are stored in MySQL, and administrators can review and act on reports from a second menu.
+Advanced Reports is a SourceMod player-reporting plugin with in-game menus, SQLite or MySQL storage, administrator actions, and optional Discord webhook notifications.
 
-This release targets and is compiled with **SourceMod 1.12.0.7041**.
+Version **4.4.0** targets and is compiled with **SourceMod 1.12.0.7041**.
 
-## Features
+## Drag-and-drop installation
 
-- Race-safe per-client player, reason, report, and admin menus
-- Asynchronous MySQL queries with escaped player-controlled values
-- One current report per Steam ID; a new report updates the existing record
-- Working kick, permanent-ban, report deletion, and optional server-redirect actions
-- Optional Discord webhook notifications through SteamWorks
-- Reproducible build script and GitHub compile check pinned to SourceMod 1.12.0.7041
+For a Linux game server, download [AdvancedReports-4.4.0-sm1.12-linux.zip](dist/AdvancedReports-4.4.0-sm1.12-linux.zip) and extract it directly into the game directory, such as `csgo/`. The archive includes:
 
-## Requirements
+- `AdvancedReports.smx`
+- The official SteamWorks 1.2.3c Linux extension for Discord webhooks
+- Report reasons
+- An editable `cfg/sourcemod/AdvancedReports.cfg`
+- Installation instructions and third-party notices
 
-- A Source server running SourceMod 1.12
-- A MySQL entry named `advancedreports` in `addons/sourcemod/configs/databases.cfg`
-- Optional: [SteamWorks](https://github.com/KyleSanderson/SteamWorks) for Discord notifications
-- Optional: a compatible `server_redirect.smx` providing the `RedirectClient` native, such as the [GAMMA CASE Server Redirect source](https://github.com/EvanIMK/BHOP-Server/blob/master/SERVER/addons/sourcemod/scripting/server_redirect.sp), for the **Go to reported server** action
+The default `storage-local` database uses SourceMod's built-in SQLite support. It requires no database configuration, so reporting works immediately after the plugin loads.
 
-Example database entry:
+The SteamWorks project's official 1.2.3c release does not provide a Windows DLL. On Windows, install the core files and add a compatible `SteamWorks.ext.dll` separately if Discord notifications are required. Reporting and SQLite storage still work without SteamWorks.
+
+## Commands
+
+Players can open the report menu with any of these chat commands:
+
+- `!report` or `/report`
+- `!calladmin` or `/calladmin`
+
+Administrators can use:
+
+- `!reports` or `/reports` — opens saved reports; requires the slay flag
+
+Kick and ban actions also check the administrator's kick and ban flags. Override those checks with `sm_advreports_kick` and `sm_advreports_ban` in `admin_overrides.cfg` if needed.
+
+## Configuration
+
+Edit `cfg/sourcemod/AdvancedReports.cfg`:
+
+- `sm_advreports_database` — SourceMod database entry; defaults to `storage-local` for setup-free SQLite
+- `sm_advreports_cooldown` — seconds each player must wait between reports; defaults to `60`
+- `sm_advreports_discord` — enables Discord notifications; defaults to `0`
+- `sm_advreports_webhook` — private Discord webhook URL
+- `sm_advreports_server_address` — public `IP:port`; blank derives it from `hostip` and `hostport`
+
+After editing the database setting, restart the server or reload the plugin.
+
+### Discord webhooks
+
+The Linux package already contains the SteamWorks extension needed to send webhooks. Set:
+
+```text
+sm_advreports_discord "1"
+sm_advreports_webhook "https://discord.com/api/webhooks/..."
+```
+
+Restart the server and run `sm exts list` to confirm SteamWorks is loaded. Never publish a real webhook URL—treat it like a password.
+
+### Optional MySQL storage
+
+Set `sm_advreports_database "advancedreports"` and add this entry to `addons/sourcemod/configs/databases.cfg`:
 
 ```text
 "advancedreports"
@@ -34,42 +70,34 @@ Example database entry:
 }
 ```
 
-The plugin creates and updates the `aReports` table automatically. The database user therefore needs `CREATE`, `ALTER`, `SELECT`, `INSERT`, `UPDATE`, and `DELETE` permissions for this table.
+The MySQL user needs `CREATE`, `ALTER`, `SELECT`, `INSERT`, `UPDATE`, and `DELETE` permissions for the automatically managed `aReports` table.
 
-## Installation
+## Features
 
-Copy the repository's `addons/sourcemod` directory into the server's game directory. At minimum, install:
-
-- `addons/sourcemod/plugins/AdvancedReports.smx`
-- `addons/sourcemod/configs/advreport/advreasons.cfg`
-
-Start or restart the server, then edit the generated file at `cfg/sourcemod/AdvancedReports.cfg` if needed.
-
-## Commands
-
-- `sm_calladmin` — opens the player report menu
-- `sm_reports` — opens the report administration menu; requires the slay flag
-
-The kick and ban actions also check the administrator's kick and ban flags. These checks can be overridden with `sm_advreports_kick` and `sm_advreports_ban` in `admin_overrides.cfg`.
-
-## ConVars
-
-- `sm_advreports_discord` — enables Discord notifications (`0` by default)
-- `sm_advreports_webhook` — Discord webhook URL; blank by default and protected from normal ConVar display
-- `sm_advreports_server_address` — public `IP:port` used in reports and redirects; when blank, the plugin derives it from `hostip` and `hostport`
-- `sm_advreports_cooldown` — seconds each player must wait between reports (`60` by default)
-
-Never commit a real Discord webhook URL. Treat it like a password and configure it only on the game server.
+- Per-client player, reason, report, and administrator menus
+- Setup-free SQLite or optional shared MySQL storage
+- Asynchronous and escaped database queries
+- One current report per Steam ID
+- Kick, permanent-ban, report deletion, and optional server redirect actions
+- Discord webhook notifications through optional SteamWorks HTTP support
+- Player report cooldown
+- Reproducible build and package scripts pinned to SourceMod 1.12.0.7041
 
 ## Building
 
-Run the PowerShell build script from the repository root:
+Compile the plugin:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1
 ```
 
-The script downloads the exact SourceMod 1.12.0.7041 compiler and a pinned SteamWorks include into the ignored `.build` directory. It fails on compiler errors or warnings and writes the verified binary to `addons/sourcemod/plugins/AdvancedReports.smx`.
+Compile and generate the Linux drag-and-drop package:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 -Package
+```
+
+The build downloads the exact SourceMod compiler and a pinned SourceMod 1.12-compatible SteamWorks include into the ignored `.build` directory. Packaging additionally downloads the official SteamWorks 1.2.3c Linux release, validates its SHA-256 checksum, and creates the ZIP in `dist/`.
 
 To use an existing SourceMod 1.12.0.7041 installation:
 
@@ -82,6 +110,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build.ps1 `
 
 | Version | Changes |
 | --- | --- |
+| 4.4.0 | Added `!report`, setup-free SQLite, editable cfg, and a Linux drag-and-drop package with the SteamWorks webhook extension |
 | 4.3.0 | SourceMod 1.12.0.7041 compatibility, full compile/runtime cleanup, safe SQL, fixed admin actions, optional integrations, and reproducible builds |
 | 4.2.2 | Include-file fixes and general maintenance |
 | 4.2.0 | Initial GitHub release |

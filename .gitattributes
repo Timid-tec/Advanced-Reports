@@ -6,5 +6,8 @@
 *.md text eol=lf
 *.ps1 text eol=lf
 *.sp text eol=lf
+*.txt text eol=lf
 *.yml text eol=lf
 *.smx binary
+*.so binary
+*.zip binary

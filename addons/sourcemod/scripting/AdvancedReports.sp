@@ -18,13 +18,13 @@
 #undef REQUIRE_EXTENSIONS
 #include <SteamWorks>
 
-#define PLUGIN_VERSION "4.3.0"
-#define DATABASE_CONFIG "advancedreports"
+#define PLUGIN_VERSION "4.4.0"
 #define REPORT_TABLE "aReports"
 #define CHAT_PREFIX "\x08[\x0EAdvReports\x08]\x01"
 
 #define MAX_ADDRESS_LENGTH 128
 #define MAX_AUTH_LENGTH 32
+#define MAX_DATABASE_CONFIG_LENGTH 64
 #define MAX_QUERY_LENGTH 4096
 #define MAX_REASON_LENGTH 256
 #define MAX_WEBHOOK_LENGTH 512
@@ -49,6 +49,16 @@ static const char MYSQL_MIGRATE_TABLE[] =
     ... "MODIFY `reporter` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL,"
     ... "MODIFY `serverip` varchar(128) COLLATE utf8mb4_unicode_ci NOT NULL;";
 
+static const char SQLITE_CREATE_TABLE[] =
+    "CREATE TABLE IF NOT EXISTS `" ... REPORT_TABLE ... "` ("
+    ... "`Id` INTEGER PRIMARY KEY AUTOINCREMENT,"
+    ... "`playername` TEXT NOT NULL,"
+    ... "`steam` TEXT NOT NULL UNIQUE,"
+    ... "`reason` TEXT NOT NULL,"
+    ... "`reporter` TEXT NOT NULL,"
+    ... "`date` TEXT NOT NULL,"
+    ... "`serverip` TEXT NOT NULL);";
+
 public Plugin myinfo =
 {
     name = "Advanced Reports",
@@ -63,14 +73,18 @@ native void RedirectClient(int client, char[] address, any ...);
 
 Database g_Database = null;
 bool g_DatabaseReady = false;
+bool g_DatabaseConnectStarted = false;
+bool g_DatabaseIsMySQL = false;
 ArrayList g_ReportReasons = null;
 
+ConVar g_CvarDatabaseConfig;
 ConVar g_CvarDiscordEnabled;
 ConVar g_CvarDiscordWebhook;
 ConVar g_CvarPublicAddress;
 ConVar g_CvarReportCooldown;
 
 bool g_DiscordEnabled = false;
+char g_DatabaseConfig[MAX_DATABASE_CONFIG_LENGTH];
 char g_DiscordWebhook[MAX_WEBHOOK_LENGTH];
 char g_PublicAddress[MAX_ADDRESS_LENGTH];
 float g_ReportCooldown = 60.0;
@@ -90,6 +104,11 @@ public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int errorMa
 
 public void OnPluginStart()
 {
+    g_CvarDatabaseConfig = CreateConVar(
+        "sm_advreports_database",
+        "storage-local",
+        "SourceMod databases.cfg entry to use. The default storage-local entry needs no setup."
+    );
     g_CvarDiscordEnabled = CreateConVar(
         "sm_advreports_discord",
         "0",
@@ -122,22 +141,29 @@ public void OnPluginStart()
         3600.0
     );
 
+    g_CvarDatabaseConfig.AddChangeHook(OnSettingsChanged);
     g_CvarDiscordEnabled.AddChangeHook(OnSettingsChanged);
     g_CvarDiscordWebhook.AddChangeHook(OnSettingsChanged);
     g_CvarPublicAddress.AddChangeHook(OnSettingsChanged);
     g_CvarReportCooldown.AddChangeHook(OnSettingsChanged);
 
+    RegConsoleCmd("sm_report", Command_ReportPlayer, "Open the player report menu.");
     RegConsoleCmd("sm_calladmin", Command_ReportPlayer, "Open the player report menu.");
     RegAdminCmd("sm_reports", Command_ViewReports, ADMFLAG_SLAY, "Open the saved reports menu.");
 
     AutoExecConfig(true, "AdvancedReports");
     LoadReportReasons();
-    Database.Connect(OnDatabaseConnected, DATABASE_CONFIG);
 }
 
 public void OnConfigsExecuted()
 {
     CacheSettings();
+
+    if (!g_DatabaseConnectStarted)
+    {
+        g_DatabaseConnectStarted = true;
+        Database.Connect(OnDatabaseConnected, g_DatabaseConfig);
+    }
 }
 
 public void OnClientDisconnect(int client)
@@ -156,12 +182,19 @@ public void OnSettingsChanged(ConVar convar, const char[] oldValue, const char[]
 
 void CacheSettings()
 {
+    g_CvarDatabaseConfig.GetString(g_DatabaseConfig, sizeof(g_DatabaseConfig));
     g_DiscordEnabled = g_CvarDiscordEnabled.BoolValue;
     g_CvarDiscordWebhook.GetString(g_DiscordWebhook, sizeof(g_DiscordWebhook));
     g_CvarPublicAddress.GetString(g_PublicAddress, sizeof(g_PublicAddress));
     g_ReportCooldown = g_CvarReportCooldown.FloatValue;
+    TrimString(g_DatabaseConfig);
     TrimString(g_DiscordWebhook);
     TrimString(g_PublicAddress);
+
+    if (g_DatabaseConfig[0] == '\0')
+    {
+        strcopy(g_DatabaseConfig, sizeof(g_DatabaseConfig), "storage-local");
+    }
 
     if (!g_DiscordEnabled || IsSteamWorksHttpAvailable())
     {
@@ -217,28 +250,39 @@ public void OnDatabaseConnected(Database database, const char[] error, any data)
 {
     if (database == null)
     {
-        SetFailState("Could not connect to database configuration '%s': %s", DATABASE_CONFIG, error);
+        SetFailState("Could not connect to database configuration '%s': %s", g_DatabaseConfig, error);
         return;
     }
 
     char driver[16];
     database.Driver.GetIdentifier(driver, sizeof(driver));
-    if (!StrEqual(driver, "mysql", false))
+    g_DatabaseIsMySQL = StrEqual(driver, "mysql", false);
+    bool databaseIsSQLite = StrEqual(driver, "sqlite", false);
+    if (!g_DatabaseIsMySQL && !databaseIsSQLite)
     {
         delete database;
-        SetFailState("Database configuration '%s' must use the MySQL driver (found '%s').", DATABASE_CONFIG, driver);
+        SetFailState(
+            "Database configuration '%s' must use the MySQL or SQLite driver (found '%s').",
+            g_DatabaseConfig,
+            driver
+        );
         return;
     }
 
     delete g_Database;
     g_Database = database;
 
-    if (!g_Database.SetCharset("utf8mb4") && !g_Database.SetCharset("utf8"))
+    if (g_DatabaseIsMySQL
+        && !g_Database.SetCharset("utf8mb4")
+        && !g_Database.SetCharset("utf8"))
     {
         LogMessage("Could not set the database charset to utf8mb4 or utf8; continuing with the configured charset.");
     }
 
-    g_Database.Query(OnDatabaseSchemaCreated, MYSQL_CREATE_TABLE);
+    g_Database.Query(
+        OnDatabaseSchemaCreated,
+        g_DatabaseIsMySQL ? MYSQL_CREATE_TABLE : SQLITE_CREATE_TABLE
+    );
 }
 
 public void OnDatabaseSchemaCreated(Database database, DBResultSet results, const char[] error, any data)
@@ -249,7 +293,14 @@ public void OnDatabaseSchemaCreated(Database database, DBResultSet results, cons
         return;
     }
 
-    g_Database.Query(OnDatabaseSchemaMigrated, MYSQL_MIGRATE_TABLE);
+    if (g_DatabaseIsMySQL)
+    {
+        g_Database.Query(OnDatabaseSchemaMigrated, MYSQL_MIGRATE_TABLE);
+    }
+    else
+    {
+        g_DatabaseReady = true;
+    }
 }
 
 public void OnDatabaseSchemaMigrated(Database database, DBResultSet results, const char[] error, any data)
@@ -472,10 +523,8 @@ void SubmitPlayerReport(int reporter, int target, const char[] reason)
     FormatEx(
         query,
         sizeof(query),
-        "INSERT INTO `%s` (`playername`,`steam`,`reason`,`reporter`,`date`,`serverip`) "
-        ... "VALUES ('%s','%s','%s','%s','%s','%s') "
-        ... "ON DUPLICATE KEY UPDATE `playername`=VALUES(`playername`),`reason`=VALUES(`reason`),"
-        ... "`reporter`=VALUES(`reporter`),`date`=VALUES(`date`),`serverip`=VALUES(`serverip`);",
+        "REPLACE INTO `%s` (`playername`,`steam`,`reason`,`reporter`,`date`,`serverip`) "
+        ... "VALUES ('%s','%s','%s','%s','%s','%s');",
         REPORT_TABLE,
         escapedTarget,
         escapedTargetAuth,
