@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $sourceModVersion = "1.12.0-git7041"
-$pluginVersion = "4.4.0"
+$pluginVersion = "4.5.0"
 $sourceModUrl = "https://sm.alliedmods.net/smdrop/1.12/sourcemod-$sourceModVersion-windows.zip"
 $steamWorksVersion = "1.2.3c"
 $steamWorksIncludeCommit = "f0c1b62dff615511b27824aaa2815c7dc58d2716"
@@ -115,18 +115,25 @@ if ($Package) {
     $distributionRoot = Join-Path $projectRoot "dist"
     $distributionArchive = Join-Path $distributionRoot "$packageName.zip"
 
+    if (Test-Path -LiteralPath $packageRoot) {
+        Remove-Item -LiteralPath $packageRoot -Recurse -Force
+    }
+
     New-Item -ItemType Directory -Force -Path `
         (Join-Path $packageAddons "plugins"), `
         (Join-Path $packageAddons "extensions"), `
+        (Join-Path $packageAddons "scripting"), `
         (Join-Path $packageAddons "configs\advreport"), `
         $packageConfig, `
         $distributionRoot | Out-Null
 
     Copy-Item -LiteralPath $outputFile -Destination (Join-Path $packageAddons "plugins\AdvancedReports.smx") -Force
     Copy-Item -LiteralPath $extensionOutput -Destination (Join-Path $packageAddons "extensions\SteamWorks.ext.so") -Force
+    Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $packageAddons "scripting\AdvancedReports.sp") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "addons\sourcemod\configs\advreport\advreasons.cfg") -Destination (Join-Path $packageAddons "configs\advreport\advreasons.cfg") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "cfg\sourcemod\AdvancedReports.cfg") -Destination (Join-Path $packageConfig "AdvancedReports.cfg") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "packaging\README_INSTALL.txt") -Destination (Join-Path $packageRoot "README_INSTALL.txt") -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "CHANGELOG.md") -Destination (Join-Path $packageRoot "CHANGELOG.md") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD_PARTY_NOTICES.md") -Destination (Join-Path $packageRoot "THIRD_PARTY_NOTICES.md") -Force
 
     if (Test-Path -LiteralPath $distributionArchive) {
