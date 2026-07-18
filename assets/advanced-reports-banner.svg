@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="title description">
+  <title id="title">Advanced Reports</title>
+  <desc id="description">Animated neon banner for the Advanced Reports SourceMod plugin</desc>
+
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="0.52" stop-color="#101a32"/>
+      <stop offset="1" stop-color="#07111f"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#35d6ff">
+        <animate attributeName="stop-color" values="#35d6ff;#8b5cf6;#35d6ff" dur="6s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="0.5" stop-color="#8b5cf6">
+        <animate attributeName="stop-color" values="#8b5cf6;#fb7185;#8b5cf6" dur="6s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="1" stop-color="#fb7185">
+        <animate attributeName="stop-color" values="#fb7185;#35d6ff;#fb7185" dur="6s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M 42 0 L 0 0 0 42" fill="none" stroke="#8ab4f8" stroke-opacity="0.09" stroke-width="1"/>
+    </pattern>
+    <filter id="glow" x="-40%" y="-60%" width="180%" height="220%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <clipPath id="frame">
+      <rect x="2" y="2" width="1196" height="296" rx="24"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#frame)">
+    <rect width="1200" height="300" fill="url(#background)"/>
+    <rect x="-42" y="-42" width="1284" height="384" fill="url(#grid)">
+      <animateTransform attributeName="transform" type="translate" values="0 0;42 42" dur="8s" repeatCount="indefinite"/>
+    </rect>
+
+    <circle cx="120" cy="70" r="115" fill="#35d6ff" opacity="0.08">
+      <animate attributeName="r" values="105;135;105" dur="5s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="1080" cy="230" r="130" fill="#8b5cf6" opacity="0.09">
+      <animate attributeName="r" values="145;110;145" dur="6s" repeatCount="indefinite"/>
+    </circle>
+
+    <g transform="translate(116 150)" filter="url(#glow)">
+      <path d="M0 -54 L48 -76 L96 -54 V6 C96 48 66 78 48 88 C30 78 0 48 0 6 Z" fill="none" stroke="url(#accent)" stroke-width="7" stroke-linejoin="round" stroke-dasharray="360" stroke-dashoffset="360">
+        <animate attributeName="stroke-dashoffset" values="360;0;0" keyTimes="0;0.45;1" dur="3.5s" repeatCount="indefinite"/>
+      </path>
+      <path d="M29 2 L43 17 L70 -20" fill="none" stroke="#eefaff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="100" stroke-dashoffset="100">
+        <animate attributeName="stroke-dashoffset" values="100;100;0;0" keyTimes="0;0.32;0.58;1" dur="3.5s" repeatCount="indefinite"/>
+      </path>
+    </g>
+
+    <text x="268" y="145" fill="url(#accent)" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="68" font-weight="800" letter-spacing="5" filter="url(#glow)" stroke="url(#accent)" stroke-width="1.2" stroke-dasharray="900" stroke-dashoffset="900">
+      ADVANCED REPORTS
+      <animate attributeName="stroke-dashoffset" values="900;0;0" keyTimes="0;0.55;1" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="fill-opacity" values="0.15;1;1;0.8;1" keyTimes="0;0.35;0.72;0.8;1" dur="4s" repeatCount="indefinite"/>
+    </text>
+
+    <text x="272" y="194" fill="#cbd5e1" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="20" font-weight="600" letter-spacing="7" opacity="0">
+      SOURCEMOD PLAYER REPORTING
+      <animate attributeName="opacity" values="0;0;1;1" keyTimes="0;0.25;0.5;1" dur="3s" fill="freeze"/>
+    </text>
+
+    <g transform="translate(272 232)" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="14" font-weight="700" letter-spacing="2">
+      <circle cx="7" cy="-5" r="6" fill="#22c55e">
+        <animate attributeName="opacity" values="1;0.35;1" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
+      <text x="24" y="0" fill="#94a3b8">SQL STORAGE</text>
+      <circle cx="180" cy="-5" r="6" fill="#35d6ff">
+        <animate attributeName="opacity" values="0.35;1;0.35" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
+      <text x="197" y="0" fill="#94a3b8">DISCORD WEBHOOKS</text>
+      <circle cx="423" cy="-5" r="6" fill="#a78bfa">
+        <animate attributeName="opacity" values="1;0.35;1" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
+      <text x="440" y="0" fill="#94a3b8">ADMIN TOOLS</text>
+    </g>
+
+    <rect x="0" y="-35" width="1200" height="28" fill="#ffffff" opacity="0.035">
+      <animate attributeName="y" values="-35;335" dur="5s" repeatCount="indefinite"/>
+    </rect>
+  </g>
+
+  <rect x="2" y="2" width="1196" height="296" rx="24" fill="none" stroke="url(#accent)" stroke-width="3" opacity="0.8"/>
+
+  <style>
+    @media (prefers-reduced-motion: reduce) {
+      animate, animateTransform { display: none; }
+    }
+  </style>
+</svg>

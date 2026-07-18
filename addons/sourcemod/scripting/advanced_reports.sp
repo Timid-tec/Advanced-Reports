@@ -18,13 +18,14 @@
 #undef REQUIRE_EXTENSIONS
 #include <SteamWorks>
 
-#define PLUGIN_VERSION "4.4.0"
+#define PLUGIN_VERSION "4.5.0"
 #define REPORT_TABLE "aReports"
 #define CHAT_PREFIX "\x08[\x0EAdvReports\x08]\x01"
 
 #define MAX_ADDRESS_LENGTH 128
 #define MAX_AUTH_LENGTH 32
 #define MAX_DATABASE_CONFIG_LENGTH 64
+#define MAX_PAIR_KEY_LENGTH 80
 #define MAX_QUERY_LENGTH 4096
 #define MAX_REASON_LENGTH 256
 #define MAX_WEBHOOK_LENGTH 512
@@ -76,22 +77,37 @@ bool g_DatabaseReady = false;
 bool g_DatabaseConnectStarted = false;
 bool g_DatabaseIsMySQL = false;
 ArrayList g_ReportReasons = null;
+ArrayList g_ReportReasonIsCustom = null;
+StringMap g_ReportPairTimes = null;
 
 ConVar g_CvarDatabaseConfig;
 ConVar g_CvarDiscordEnabled;
 ConVar g_CvarDiscordWebhook;
 ConVar g_CvarPublicAddress;
 ConVar g_CvarReportCooldown;
+ConVar g_CvarDuplicateWindow;
+ConVar g_CvarCustomReasons;
+ConVar g_CvarNotifyAdmins;
+ConVar g_CvarAdminSound;
+ConVar g_CvarProtectAdmins;
 
 bool g_DiscordEnabled = false;
 char g_DatabaseConfig[MAX_DATABASE_CONFIG_LENGTH];
 char g_DiscordWebhook[MAX_WEBHOOK_LENGTH];
 char g_PublicAddress[MAX_ADDRESS_LENGTH];
+char g_AdminSound[PLATFORM_MAX_PATH];
 float g_ReportCooldown = 60.0;
+int g_DuplicateWindow = 600;
+bool g_CustomReasonsEnabled = true;
+bool g_NotifyAdmins = true;
+bool g_ProtectAdmins = false;
 bool g_MissingSteamWorksNoticeShown = false;
+char g_AuditLogPath[PLATFORM_MAX_PATH];
 
 int g_SelectedTargetUserId[MAXPLAYERS + 1];
 float g_NextReportAllowed[MAXPLAYERS + 1];
+bool g_AwaitingCustomReason[MAXPLAYERS + 1];
+char g_PendingReason[MAXPLAYERS + 1][MAX_REASON_LENGTH];
 char g_AdminTargetName[MAXPLAYERS + 1][MAX_NAME_LENGTH];
 char g_AdminTargetAuth[MAXPLAYERS + 1][MAX_AUTH_LENGTH];
 char g_AdminServerAddress[MAXPLAYERS + 1][MAX_ADDRESS_LENGTH];
@@ -140,17 +156,71 @@ public void OnPluginStart()
         true,
         3600.0
     );
+    g_CvarDuplicateWindow = CreateConVar(
+        "sm_advreports_duplicate_window",
+        "600",
+        "Seconds before the same reporter can report the same target again. Set to 0 to disable.",
+        FCVAR_NONE,
+        true,
+        0.0,
+        true,
+        86400.0
+    );
+    g_CvarCustomReasons = CreateConVar(
+        "sm_advreports_custom_reasons",
+        "1",
+        "Allow reason entries marked custom in advreasons.cfg to collect private chat input.",
+        FCVAR_NONE,
+        true,
+        0.0,
+        true,
+        1.0
+    );
+    g_CvarNotifyAdmins = CreateConVar(
+        "sm_advreports_notify_admins",
+        "1",
+        "Notify online administrators when a report is saved.",
+        FCVAR_NONE,
+        true,
+        0.0,
+        true,
+        1.0
+    );
+    g_CvarAdminSound = CreateConVar(
+        "sm_advreports_admin_sound",
+        "buttons/button17.wav",
+        "Sound played to notified admins. Leave blank to disable sound."
+    );
+    g_CvarProtectAdmins = CreateConVar(
+        "sm_advreports_protect_admins",
+        "0",
+        "Hide admins with sm_advreports_immunity access from player report menus.",
+        FCVAR_NONE,
+        true,
+        0.0,
+        true,
+        1.0
+    );
 
     g_CvarDatabaseConfig.AddChangeHook(OnSettingsChanged);
     g_CvarDiscordEnabled.AddChangeHook(OnSettingsChanged);
     g_CvarDiscordWebhook.AddChangeHook(OnSettingsChanged);
     g_CvarPublicAddress.AddChangeHook(OnSettingsChanged);
     g_CvarReportCooldown.AddChangeHook(OnSettingsChanged);
+    g_CvarDuplicateWindow.AddChangeHook(OnSettingsChanged);
+    g_CvarCustomReasons.AddChangeHook(OnSettingsChanged);
+    g_CvarNotifyAdmins.AddChangeHook(OnSettingsChanged);
+    g_CvarAdminSound.AddChangeHook(OnSettingsChanged);
+    g_CvarProtectAdmins.AddChangeHook(OnSettingsChanged);
 
     RegConsoleCmd("sm_report", Command_ReportPlayer, "Open the player report menu.");
     RegConsoleCmd("sm_calladmin", Command_ReportPlayer, "Open the player report menu.");
     RegAdminCmd("sm_reports", Command_ViewReports, ADMFLAG_SLAY, "Open the saved reports menu.");
+    AddCommandListener(OnPlayerChat, "say");
+    AddCommandListener(OnPlayerChat, "say_team");
 
+    g_ReportPairTimes = new StringMap();
+    BuildPath(Path_SM, g_AuditLogPath, sizeof(g_AuditLogPath), "logs/advancedreports.log");
     AutoExecConfig(true, "AdvancedReports");
     LoadReportReasons();
 }
@@ -170,6 +240,8 @@ public void OnClientDisconnect(int client)
 {
     g_SelectedTargetUserId[client] = 0;
     g_NextReportAllowed[client] = 0.0;
+    g_AwaitingCustomReason[client] = false;
+    g_PendingReason[client][0] = '\0';
     g_AdminTargetName[client][0] = '\0';
     g_AdminTargetAuth[client][0] = '\0';
     g_AdminServerAddress[client][0] = '\0';
@@ -187,9 +259,15 @@ void CacheSettings()
     g_CvarDiscordWebhook.GetString(g_DiscordWebhook, sizeof(g_DiscordWebhook));
     g_CvarPublicAddress.GetString(g_PublicAddress, sizeof(g_PublicAddress));
     g_ReportCooldown = g_CvarReportCooldown.FloatValue;
+    g_DuplicateWindow = g_CvarDuplicateWindow.IntValue;
+    g_CustomReasonsEnabled = g_CvarCustomReasons.BoolValue;
+    g_NotifyAdmins = g_CvarNotifyAdmins.BoolValue;
+    g_CvarAdminSound.GetString(g_AdminSound, sizeof(g_AdminSound));
+    g_ProtectAdmins = g_CvarProtectAdmins.BoolValue;
     TrimString(g_DatabaseConfig);
     TrimString(g_DiscordWebhook);
     TrimString(g_PublicAddress);
+    TrimString(g_AdminSound);
 
     if (g_DatabaseConfig[0] == '\0')
     {
@@ -224,6 +302,8 @@ void LoadReportReasons()
 
     delete g_ReportReasons;
     g_ReportReasons = new ArrayList(MAX_REASON_LENGTH);
+    delete g_ReportReasonIsCustom;
+    g_ReportReasonIsCustom = new ArrayList();
 
     do
     {
@@ -234,6 +314,7 @@ void LoadReportReasons()
         if (reason[0] != '\0')
         {
             g_ReportReasons.PushString(reason);
+            g_ReportReasonIsCustom.Push(config.GetNum("custom", 0) != 0);
         }
     }
     while (config.GotoNextKey(false));
@@ -328,6 +409,9 @@ public Action Command_ReportPlayer(int client, int args)
         return Plugin_Handled;
     }
 
+    g_AwaitingCustomReason[client] = false;
+    g_PendingReason[client][0] = '\0';
+
     float waitTime = g_NextReportAllowed[client] - GetEngineTime();
     if (waitTime > 0.0)
     {
@@ -346,7 +430,7 @@ public Action Command_ReportPlayer(int client, int args)
     int playerCount = 0;
     for (int target = 1; target <= MaxClients; target++)
     {
-        if (!IsHumanClient(target) || target == client)
+        if (!IsHumanClient(target) || target == client || IsProtectedReportTarget(target))
         {
             continue;
         }
@@ -378,9 +462,21 @@ public int MenuHandler_SelectPlayer(Menu menu, MenuAction action, int client, in
         menu.GetItem(item, userId, sizeof(userId));
 
         int target = GetClientOfUserId(StringToInt(userId));
-        if (!IsHumanClient(target) || target == client)
+        if (!IsHumanClient(target) || target == client || IsProtectedReportTarget(target))
         {
             PrintToChat(client, "%s That player is no longer available.", CHAT_PREFIX);
+            return 0;
+        }
+
+        int duplicateWait = GetDuplicateWait(client, target);
+        if (duplicateWait > 0)
+        {
+            PrintToChat(
+                client,
+                "%s You already reported that player. Please wait %d second(s) before reporting them again.",
+                CHAT_PREFIX,
+                duplicateWait
+            );
             return 0;
         }
 
@@ -428,7 +524,7 @@ public int MenuHandler_SelectReason(Menu menu, MenuAction action, int client, in
         }
 
         int target = GetClientOfUserId(g_SelectedTargetUserId[client]);
-        if (!IsHumanClient(target) || target == client)
+        if (!IsHumanClient(target) || target == client || IsProtectedReportTarget(target))
         {
             PrintToChat(client, "%s That player is no longer available.", CHAT_PREFIX);
             return 0;
@@ -436,11 +532,128 @@ public int MenuHandler_SelectReason(Menu menu, MenuAction action, int client, in
 
         char reason[MAX_REASON_LENGTH];
         g_ReportReasons.GetString(reasonIndex, reason, sizeof(reason));
-        SubmitPlayerReport(client, target, reason);
+
+        if (g_CustomReasonsEnabled && g_ReportReasonIsCustom.Get(reasonIndex) != 0)
+        {
+            g_AwaitingCustomReason[client] = true;
+            g_PendingReason[client][0] = '\0';
+            PrintToChat(
+                client,
+                "%s Type the report reason in chat. It will stay private. Type !cancel to stop.",
+                CHAT_PREFIX
+            );
+        }
+        else
+        {
+            ShowReportConfirmation(client, reason);
+        }
     }
     else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
     {
         Command_ReportPlayer(client, 0);
+    }
+    else if (action == MenuAction_End)
+    {
+        delete menu;
+    }
+
+    return 0;
+}
+
+public Action OnPlayerChat(int client, const char[] command, int argc)
+{
+    if (!IsHumanClient(client) || !g_AwaitingCustomReason[client])
+    {
+        return Plugin_Continue;
+    }
+
+    char reason[MAX_REASON_LENGTH];
+    GetCmdArgString(reason, sizeof(reason));
+    StripQuotes(reason);
+    TrimString(reason);
+
+    if (StrEqual(reason, "!cancel", false) || StrEqual(reason, "/cancel", false))
+    {
+        g_AwaitingCustomReason[client] = false;
+        g_PendingReason[client][0] = '\0';
+        PrintToChat(client, "%s Report cancelled.", CHAT_PREFIX);
+        return Plugin_Handled;
+    }
+
+    if (reason[0] == '!' || reason[0] == '/')
+    {
+        return Plugin_Continue;
+    }
+
+    if (strlen(reason) < 3)
+    {
+        PrintToChat(client, "%s Please enter at least 3 characters, or type !cancel.", CHAT_PREFIX);
+        return Plugin_Handled;
+    }
+
+    int target = GetClientOfUserId(g_SelectedTargetUserId[client]);
+    if (!IsHumanClient(target) || target == client || IsProtectedReportTarget(target))
+    {
+        g_AwaitingCustomReason[client] = false;
+        PrintToChat(client, "%s That player is no longer available.", CHAT_PREFIX);
+        return Plugin_Handled;
+    }
+
+    g_AwaitingCustomReason[client] = false;
+    ShowReportConfirmation(client, reason);
+    return Plugin_Handled;
+}
+
+void ShowReportConfirmation(int client, const char[] reason)
+{
+    int target = GetClientOfUserId(g_SelectedTargetUserId[client]);
+    if (!IsHumanClient(target) || target == client || IsProtectedReportTarget(target))
+    {
+        PrintToChat(client, "%s That player is no longer available.", CHAT_PREFIX);
+        return;
+    }
+
+    strcopy(g_PendingReason[client], sizeof(g_PendingReason[]), reason);
+
+    char targetName[MAX_NAME_LENGTH];
+    GetClientName(target, targetName, sizeof(targetName));
+
+    Menu menu = new Menu(MenuHandler_ConfirmReport);
+    menu.SetTitle("Submit this report?\nTarget: %s\nReason: %s", targetName, reason);
+    menu.AddItem("confirm", "Submit report");
+    menu.AddItem("cancel", "Cancel");
+    menu.ExitBackButton = true;
+    menu.Display(client, MENU_TIME_FOREVER);
+}
+
+public int MenuHandler_ConfirmReport(Menu menu, MenuAction action, int client, int item)
+{
+    if (action == MenuAction_Select)
+    {
+        char itemInfo[16];
+        menu.GetItem(item, itemInfo, sizeof(itemInfo));
+
+        if (StrEqual(itemInfo, "confirm"))
+        {
+            int target = GetClientOfUserId(g_SelectedTargetUserId[client]);
+            if (!IsHumanClient(target) || target == client || IsProtectedReportTarget(target))
+            {
+                PrintToChat(client, "%s That player is no longer available.", CHAT_PREFIX);
+                return 0;
+            }
+
+            SubmitPlayerReport(client, target, g_PendingReason[client]);
+            g_PendingReason[client][0] = '\0';
+        }
+        else
+        {
+            g_PendingReason[client][0] = '\0';
+            PrintToChat(client, "%s Report cancelled.", CHAT_PREFIX);
+        }
+    }
+    else if (action == MenuAction_Cancel && item == MenuCancel_ExitBack)
+    {
+        ShowReasonMenu(client);
     }
     else if (action == MenuAction_End)
     {
@@ -455,6 +668,12 @@ void SubmitPlayerReport(int reporter, int target, const char[] reason)
     if (!g_DatabaseReady || g_Database == null)
     {
         PrintToChat(reporter, "%s The reports database is unavailable.", CHAT_PREFIX);
+        return;
+    }
+
+    if (!IsHumanClient(target) || target == reporter || IsProtectedReportTarget(target))
+    {
+        PrintToChat(reporter, "%s That player is no longer available.", CHAT_PREFIX);
         return;
     }
 
@@ -485,11 +704,35 @@ void SubmitPlayerReport(int reporter, int target, const char[] reason)
         return;
     }
 
+    int duplicateWait = GetDuplicateWaitForAuths(reporterAuth, targetAuth);
+    if (duplicateWait > 0)
+    {
+        PrintToChat(
+            reporter,
+            "%s You already reported that player. Please wait %d second(s) before reporting them again.",
+            CHAT_PREFIX,
+            duplicateWait
+        );
+        return;
+    }
+
     char date[36];
     char serverAddress[MAX_ADDRESS_LENGTH];
     char hostname[128];
+    char mapName[PLATFORM_MAX_PATH];
+    char playerCount[32];
+    char targetStatus[64];
     FormatTime(date, sizeof(date), "%Y-%m-%d %H:%M:%S", GetTime());
     GetServerAddress(serverAddress, sizeof(serverAddress));
+    GetCurrentMap(mapName, sizeof(mapName));
+    FormatEx(playerCount, sizeof(playerCount), "%d/%d", GetClientCount(true), MaxClients);
+    FormatEx(
+        targetStatus,
+        sizeof(targetStatus),
+        "Team %d | %s",
+        GetClientTeam(target),
+        IsPlayerAlive(target) ? "Alive" : "Dead"
+    );
 
     ConVar hostnameCvar = FindConVar("hostname");
     if (hostnameCvar != null)
@@ -543,7 +786,16 @@ void SubmitPlayerReport(int reporter, int target, const char[] reason)
     reportData.WriteString(reason);
     reportData.WriteString(serverAddress);
     reportData.WriteString(hostname);
+    reportData.WriteString(mapName);
+    reportData.WriteString(playerCount);
+    reportData.WriteString(targetStatus);
 
+    if (g_DuplicateWindow > 0)
+    {
+        char pairKey[MAX_PAIR_KEY_LENGTH];
+        BuildReportPairKey(reporterAuth, targetAuth, pairKey, sizeof(pairKey));
+        g_ReportPairTimes.SetValue(pairKey, GetTime(), true);
+    }
     g_NextReportAllowed[reporter] = GetEngineTime() + g_ReportCooldown;
     g_Database.Query(OnPlayerReportSaved, query, reportData);
 }
@@ -560,6 +812,9 @@ public void OnPlayerReportSaved(Database database, DBResultSet results, const ch
     char reason[MAX_REASON_LENGTH];
     char serverAddress[MAX_ADDRESS_LENGTH];
     char hostname[128];
+    char mapName[PLATFORM_MAX_PATH];
+    char playerCount[32];
+    char targetStatus[64];
 
     reportData.ReadString(reporterName, sizeof(reporterName));
     reportData.ReadString(reporterAuth, sizeof(reporterAuth));
@@ -568,11 +823,17 @@ public void OnPlayerReportSaved(Database database, DBResultSet results, const ch
     reportData.ReadString(reason, sizeof(reason));
     reportData.ReadString(serverAddress, sizeof(serverAddress));
     reportData.ReadString(hostname, sizeof(hostname));
+    reportData.ReadString(mapName, sizeof(mapName));
+    reportData.ReadString(playerCount, sizeof(playerCount));
+    reportData.ReadString(targetStatus, sizeof(targetStatus));
     delete reportData;
 
     int reporter = GetClientOfUserId(reporterUserId);
     if (results == null)
     {
+        char pairKey[MAX_PAIR_KEY_LENGTH];
+        BuildReportPairKey(reporterAuth, targetAuth, pairKey, sizeof(pairKey));
+        g_ReportPairTimes.Remove(pairKey);
         LogError("Could not save report for %s (%s): %s", targetName, targetAuth, error);
         if (IsHumanClient(reporter))
         {
@@ -587,6 +848,18 @@ public void OnPlayerReportSaved(Database database, DBResultSet results, const ch
         PrintToChat(reporter, "%s Your report has been submitted.", CHAT_PREFIX);
     }
 
+    LogToFileEx(
+        g_AuditLogPath,
+        "REPORT: %s (%s) reported %s (%s) for: %s | Server: %s",
+        reporterName,
+        reporterAuth,
+        targetName,
+        targetAuth,
+        reason,
+        serverAddress
+    );
+    NotifyOnlineAdmins(reporterName, targetName, reason);
+
     SendDiscordReport(
         reporterName,
         reporterAuth,
@@ -594,7 +867,10 @@ public void OnPlayerReportSaved(Database database, DBResultSet results, const ch
         targetAuth,
         reason,
         serverAddress,
-        hostname
+        hostname,
+        mapName,
+        playerCount,
+        targetStatus
     );
 }
 
@@ -904,6 +1180,7 @@ void KickReportedPlayer(int client)
         return;
     }
 
+    WriteAdminAuditLog(client, "kicked", g_AdminTargetName[client], g_AdminTargetAuth[client]);
     ShowActivity2(client, CHAT_PREFIX, " Kicked %N after reviewing a report.", target);
     KickClient(target, "Kicked after an administrator reviewed a report.");
 }
@@ -945,6 +1222,12 @@ void BanReportedPlayer(int client)
 
     if (success)
     {
+        WriteAdminAuditLog(
+            client,
+            "permanently banned",
+            g_AdminTargetName[client],
+            g_AdminTargetAuth[client]
+        );
         ShowActivity2(client, CHAT_PREFIX, " Permanently banned %s (%s).", g_AdminTargetName[client], g_AdminTargetAuth[client]);
     }
     else
@@ -970,11 +1253,24 @@ void DeleteSelectedReport(int client)
 
     char query[256];
     FormatEx(query, sizeof(query), "DELETE FROM `%s` WHERE `steam`='%s';", REPORT_TABLE, escapedAuth);
-    g_Database.Query(OnReportDeleted, query, GetClientUserId(client));
+
+    DataPack deleteData = new DataPack();
+    deleteData.WriteCell(GetClientUserId(client));
+    deleteData.WriteString(g_AdminTargetName[client]);
+    deleteData.WriteString(g_AdminTargetAuth[client]);
+    g_Database.Query(OnReportDeleted, query, deleteData);
 }
 
-public void OnReportDeleted(Database database, DBResultSet results, const char[] error, any clientUserId)
+public void OnReportDeleted(Database database, DBResultSet results, const char[] error, DataPack deleteData)
 {
+    deleteData.Reset();
+    int clientUserId = deleteData.ReadCell();
+    char targetName[MAX_NAME_LENGTH];
+    char targetAuth[MAX_AUTH_LENGTH];
+    deleteData.ReadString(targetName, sizeof(targetName));
+    deleteData.ReadString(targetAuth, sizeof(targetAuth));
+    delete deleteData;
+
     int client = GetClientOfUserId(clientUserId);
     if (results == null)
     {
@@ -989,9 +1285,13 @@ public void OnReportDeleted(Database database, DBResultSet results, const char[]
     if (IsHumanClient(client))
     {
         PrintToChat(client, "%s The report was deleted.", CHAT_PREFIX);
-        g_AdminTargetName[client][0] = '\0';
-        g_AdminTargetAuth[client][0] = '\0';
-        g_AdminServerAddress[client][0] = '\0';
+        WriteAdminAuditLog(client, "deleted", targetName, targetAuth);
+        if (StrEqual(g_AdminTargetAuth[client], targetAuth, false))
+        {
+            g_AdminTargetName[client][0] = '\0';
+            g_AdminTargetAuth[client][0] = '\0';
+            g_AdminServerAddress[client][0] = '\0';
+        }
         ShowReportsMenu(client);
     }
 }
@@ -1014,6 +1314,122 @@ int FindClientByAuth(const char[] auth)
     }
 
     return 0;
+}
+
+bool IsProtectedReportTarget(int target)
+{
+    return g_ProtectAdmins
+        && IsHumanClient(target)
+        && CheckCommandAccess(target, "sm_advreports_immunity", ADMFLAG_BAN, false);
+}
+
+int GetDuplicateWait(int reporter, int target)
+{
+    char reporterAuth[MAX_AUTH_LENGTH];
+    char targetAuth[MAX_AUTH_LENGTH];
+    if (!GetClientAuthId(reporter, AuthId_Steam2, reporterAuth, sizeof(reporterAuth), true)
+        || !GetClientAuthId(target, AuthId_Steam2, targetAuth, sizeof(targetAuth), true))
+    {
+        return 0;
+    }
+
+    return GetDuplicateWaitForAuths(reporterAuth, targetAuth);
+}
+
+int GetDuplicateWaitForAuths(const char[] reporterAuth, const char[] targetAuth)
+{
+    if (g_DuplicateWindow <= 0 || g_ReportPairTimes == null)
+    {
+        return 0;
+    }
+
+    char pairKey[MAX_PAIR_KEY_LENGTH];
+    BuildReportPairKey(reporterAuth, targetAuth, pairKey, sizeof(pairKey));
+
+    int lastReportTime;
+    if (!g_ReportPairTimes.GetValue(pairKey, lastReportTime))
+    {
+        return 0;
+    }
+
+    int remaining = (lastReportTime + g_DuplicateWindow) - GetTime();
+    if (remaining <= 0)
+    {
+        g_ReportPairTimes.Remove(pairKey);
+        return 0;
+    }
+
+    return remaining;
+}
+
+void BuildReportPairKey(
+    const char[] reporterAuth,
+    const char[] targetAuth,
+    char[] pairKey,
+    int pairKeyLength
+)
+{
+    FormatEx(pairKey, pairKeyLength, "%s|%s", reporterAuth, targetAuth);
+}
+
+void NotifyOnlineAdmins(const char[] reporterName, const char[] targetName, const char[] reason)
+{
+    if (!g_NotifyAdmins)
+    {
+        return;
+    }
+
+    bool playSound = g_AdminSound[0] != '\0'
+        && FindCharInString(g_AdminSound, ';') == -1
+        && FindCharInString(g_AdminSound, '\n') == -1
+        && FindCharInString(g_AdminSound, '\r') == -1;
+
+    for (int admin = 1; admin <= MaxClients; admin++)
+    {
+        if (!IsHumanClient(admin) || !CheckCommandAccess(admin, "sm_reports", ADMFLAG_SLAY))
+        {
+            continue;
+        }
+
+        PrintToChat(
+            admin,
+            "%s New report: %s reported %s for %s.",
+            CHAT_PREFIX,
+            reporterName,
+            targetName,
+            reason
+        );
+
+        if (playSound)
+        {
+            ClientCommand(admin, "play %s", g_AdminSound);
+        }
+    }
+}
+
+void WriteAdminAuditLog(int client, const char[] action, const char[] targetName, const char[] targetAuth)
+{
+    char adminName[MAX_NAME_LENGTH] = "Console";
+    char adminAuth[MAX_AUTH_LENGTH] = "CONSOLE";
+
+    if (IsHumanClient(client))
+    {
+        GetClientName(client, adminName, sizeof(adminName));
+        if (!GetClientAuthId(client, AuthId_Steam2, adminAuth, sizeof(adminAuth), true))
+        {
+            strcopy(adminAuth, sizeof(adminAuth), "UNKNOWN");
+        }
+    }
+
+    LogToFileEx(
+        g_AuditLogPath,
+        "ADMIN: %s (%s) %s report target %s (%s)",
+        adminName,
+        adminAuth,
+        action,
+        targetName,
+        targetAuth
+    );
 }
 
 bool IsHumanClient(int client)
@@ -1081,7 +1497,10 @@ void SendDiscordReport(
     const char[] targetAuth,
     const char[] reason,
     const char[] serverAddress,
-    const char[] hostname
+    const char[] hostname,
+    const char[] mapName,
+    const char[] playerCount,
+    const char[] targetStatus
 )
 {
     if (!g_DiscordEnabled)
@@ -1117,11 +1536,17 @@ void SendDiscordReport(
     char escapedReason[512];
     char escapedDirectConnect[384];
     char escapedHostname[256];
+    char escapedMap[PLATFORM_MAX_PATH * 2];
+    char escapedPlayerCount[64];
+    char escapedTargetStatus[128];
     JsonEscape(reporter, escapedReporter, sizeof(escapedReporter));
     JsonEscape(target, escapedTarget, sizeof(escapedTarget));
     JsonEscape(reason, escapedReason, sizeof(escapedReason));
     JsonEscape(directConnect, escapedDirectConnect, sizeof(escapedDirectConnect));
     JsonEscape(hostname, escapedHostname, sizeof(escapedHostname));
+    JsonEscape(mapName, escapedMap, sizeof(escapedMap));
+    JsonEscape(playerCount, escapedPlayerCount, sizeof(escapedPlayerCount));
+    JsonEscape(targetStatus, escapedTargetStatus, sizeof(escapedTargetStatus));
 
     char payload[4096];
     FormatEx(
@@ -1131,11 +1556,17 @@ void SendDiscordReport(
         ... "\"fields\":[{\"name\":\"Reporter\",\"value\":\"%s\",\"inline\":true},"
         ... "{\"name\":\"Target\",\"value\":\"%s\",\"inline\":true},"
         ... "{\"name\":\"Reason\",\"value\":\"%s\",\"inline\":false},"
+        ... "{\"name\":\"Map\",\"value\":\"%s\",\"inline\":true},"
+        ... "{\"name\":\"Players\",\"value\":\"%s\",\"inline\":true},"
+        ... "{\"name\":\"Target state\",\"value\":\"%s\",\"inline\":true},"
         ... "{\"name\":\"Direct connect\",\"value\":\"%s\",\"inline\":false}],"
         ... "\"footer\":{\"text\":\"Server: %s\"}}]}",
         escapedReporter,
         escapedTarget,
         escapedReason,
+        escapedMap,
+        escapedPlayerCount,
+        escapedTargetStatus,
         escapedDirectConnect,
         escapedHostname
     );
