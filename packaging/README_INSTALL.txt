@@ -6,7 +6,7 @@ ADVANCED REPORTS 4.5.0 - SOURCEMOD 1.12 - LINUX
 3. Restart the server or load addons/sourcemod/plugins/AdvancedReports.smx.
 
 The matching SourcePawn source is included at
-addons/sourcemod/scripting/AdvancedReports.sp.
+addons/sourcemod/scripting/advanced_reports.sp.
 
 The default storage-local database uses SourceMod's built-in SQLite support, so
 no database setup is required. Reports are available with !reports to admins.

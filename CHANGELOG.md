@@ -16,6 +16,9 @@
 
 ### Changed
 
+- Renamed the SourcePawn file to `advanced_reports.sp` and updated build/package references.
+- Added an animated Advanced Reports banner to the GitHub README.
+- Removed the obsolete 4.4.0 release archive from the current distribution folder.
 - The default `Other Reason` option now prompts the reporter for a private explanation.
 - Report targets and cooldowns are revalidated immediately before database submission.
 - Asynchronous report deletion now keeps its original target context, avoiding stale menu state in its callback.

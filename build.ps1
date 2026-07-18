@@ -19,7 +19,7 @@ $steamWorksPackageSha256 = "6679E6DFD19D4C78A71D224FF3F7D72D9BECBC256082ED4BCE85
 $projectRoot = $PSScriptRoot
 $buildRoot = Join-Path $projectRoot ".build"
 $dependencyInclude = Join-Path $buildRoot "include\steamworks-$steamWorksIncludeCommit"
-$sourceFile = Join-Path $projectRoot "addons\sourcemod\scripting\AdvancedReports.sp"
+$sourceFile = Join-Path $projectRoot "addons\sourcemod\scripting\advanced_reports.sp"
 $projectInclude = Join-Path $projectRoot "addons\sourcemod\scripting\include"
 $outputFile = Join-Path $projectRoot "addons\sourcemod\plugins\AdvancedReports.smx"
 
@@ -61,7 +61,7 @@ $compilerArguments = @(
     "-o", $outputFile
 )
 
-Write-Host "Compiling AdvancedReports.sp with SourceMod $sourceModVersion..."
+Write-Host "Compiling advanced_reports.sp with SourceMod $sourceModVersion..."
 $compilerOutput = & $compiler @compilerArguments 2>&1
 $compilerExitCode = $LASTEXITCODE
 $compilerOutput | ForEach-Object { Write-Host $_ }
@@ -129,7 +129,7 @@ if ($Package) {
 
     Copy-Item -LiteralPath $outputFile -Destination (Join-Path $packageAddons "plugins\AdvancedReports.smx") -Force
     Copy-Item -LiteralPath $extensionOutput -Destination (Join-Path $packageAddons "extensions\SteamWorks.ext.so") -Force
-    Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $packageAddons "scripting\AdvancedReports.sp") -Force
+    Copy-Item -LiteralPath $sourceFile -Destination (Join-Path $packageAddons "scripting\advanced_reports.sp") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "addons\sourcemod\configs\advreport\advreasons.cfg") -Destination (Join-Path $packageAddons "configs\advreport\advreasons.cfg") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "cfg\sourcemod\AdvancedReports.cfg") -Destination (Join-Path $packageConfig "AdvancedReports.cfg") -Force
     Copy-Item -LiteralPath (Join-Path $projectRoot "packaging\README_INSTALL.txt") -Destination (Join-Path $packageRoot "README_INSTALL.txt") -Force

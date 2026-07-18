@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/advanced-reports-banner.svg" alt="Advanced Reports animated banner" width="100%">
+</p>
+
 # Advanced Reports
 
 Advanced Reports is a SourceMod player-reporting plugin with in-game menus, SQLite or MySQL storage, administrator actions, and optional Discord webhook notifications.
@@ -9,7 +13,7 @@ Version **4.5.0** targets and is compiled with **SourceMod 1.12.0.7041**.
 For a Linux game server, download [AdvancedReports-4.5.0-sm1.12-linux.zip](dist/AdvancedReports-4.5.0-sm1.12-linux.zip) and extract it directly into the game directory, such as `csgo/`. The archive includes:
 
 - `AdvancedReports.smx`
-- `AdvancedReports.sp` source
+- `advanced_reports.sp` source
 - The official SteamWorks 1.2.3c Linux extension for Discord webhooks
 - Report reasons
 - An editable `cfg/sourcemod/AdvancedReports.cfg`
